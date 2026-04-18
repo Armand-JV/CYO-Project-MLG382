@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+ENV/
+
+# Data (we never commit raw data > 100 MB)
+data/raw/*.csv
+data/processed/*.csv
+*.csv
+
+# Models
+*.pkl
+*.joblib
+*.h5
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Mac / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+EOF
