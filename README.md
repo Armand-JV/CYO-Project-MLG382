@@ -60,7 +60,13 @@ Champion Model will be selected based on stratified 5-fold CV + final test set p
 ## Dev guide
 ****IMPORTANT: The .gitignore doesn't commit any datasets.  Also .gitignore doesn't commit any models or figures as to stay current and not overbloat the repo.****
 
-#### Dataset Download
+### Dependancies
+To make sure you have all the dependancies before trying to run and make sure you are on Python 3.10+
+RUN:
+
+npm install -r requirements.txt
+
+### Dataset Download
 Download the dataset at the link below and put it in ***/data/raw***.
 
 https://www.kaggle.com/datasets/blastchar/telco-customer-churn/data
