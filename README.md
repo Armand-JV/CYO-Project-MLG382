@@ -58,13 +58,20 @@ Champion Model will be selected based on stratified 5-fold CV + final test set p
 
 ---
 ## Dev guide
-****IMPORTANT: The .gitignore doesn't commit any datasets so download the main dataset and put it in /data/raw.  Also .gitignore doesn't commit any models or figures as to stay current and not overbloat the repo.****
+****IMPORTANT: The .gitignore doesn't commit any datasets.  Also .gitignore doesn't commit any models or figures as to stay current and not overbloat the repo.****
 
+#### Dataset Download
+Download the dataset at the link below and put it in ***/data/raw***.
+
+https://www.kaggle.com/datasets/blastchar/telco-customer-churn/data
+#### Model details and creation
 Look inside notebooks directory and run 01_eda_and_preprocessing.ipynb first it will create the **training data for you to use** to train the other models listed above. 
 The idea goes to run each notebook sequentially acording to its number 1, 2, 3 and so on. 
 Each model notebook needs to create a **.joblib** model.
 Then the last notebook will run the models against each other to test which one is the most accurate it will be decided the winner:
 0X_model_training_evaluation.ipynb
+
+---
 
 ## Project Structure
 
