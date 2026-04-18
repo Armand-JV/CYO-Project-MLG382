@@ -18,6 +18,14 @@ data/processed/*.csv
 *.joblib
 *.h5
 
+#Figures
+*.png
+*.jpg
+
+#Markdown and XML
+*.md
+*.xml
+
 # Notebooks checkpoints
 .ipynb_checkpoints/
 
