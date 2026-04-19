@@ -8,3 +8,4 @@ ydata-profiling
 scikit-learn
 xgboost
 jupyter
+lightgbm
