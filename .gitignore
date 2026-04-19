@@ -26,6 +26,9 @@ data/processed/*.csv
 *.md
 *.xml
 
+
+#placholders
+
 # Notebooks checkpoints
 .ipynb_checkpoints/
 
