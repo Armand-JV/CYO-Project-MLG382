@@ -60,6 +60,14 @@ Champion Model will be selected based on stratified 5-fold CV + final test set p
 ## Dev guide
 ****IMPORTANT: The .gitignore doesn't commit any datasets.  Also .gitignore doesn't commit any models or figures as to stay current and not overbloat the repo.****
 
+### How to run(run pipline)
+
+1. Run the "run_all_notebooks.py" in /src
+2. Run the "test_pipeline.py" in /tests
+3. Run the "app.py" in /src/dash_app
+
+This initilizes all of the models and tests the predictor. Then Starts the frontend with the "app.py"  
+
 ### Dependancies
 To make sure you have all the dependancies before trying to run and make sure you are on Python 3.10+
 RUN:
