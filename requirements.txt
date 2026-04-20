@@ -1,13 +1,16 @@
+
 pandas
 numpy
 matplotlib
 seaborn
 plotly
 sweetviz
-ydata-profiling
+# ydata-profiling  # Commented: incompatible with Python 3.14
 scikit-learn
 xgboost
 jupyter
 lightgbm
 shap
 pytest
+dash
+dash-bootstrap-components
