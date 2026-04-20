@@ -10,3 +10,4 @@ xgboost
 jupyter
 lightgbm
 shap
+pytest
