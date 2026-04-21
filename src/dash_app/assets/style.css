@@ -1,0 +1,177 @@
+/* Telco Churn Predictor - Custom Styles */
+
+/* Root variables for Telco theme */
+:root {
+  --primary-blue: #1e3a8a;      /* Deep corporate blue */
+  --secondary-blue: #3b82f6;    /* Bright accent */
+  --accent-orange: #f97316;     /* Warning churn */
+  --success-green: #10b981;     /* Good retention */
+  --bg-light: #f8fafc;          /* Light bg */
+  --card-bg: #ffffff;
+  --text-dark: #1e293b;
+  --border-color: #e2e8f0;
+  --shadow: 0 4px 6px -1px rgba(0, 0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+}
+
+/* Body and layout */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, var(--bg-light) 0%, #e0e7ff 100%);
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* Cards */
+.card {
+  box-shadow: var(--shadow);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+}
+
+/* Sidebar */
+.sidebar {
+  background: linear-gradient(180deg, var(--primary-blue) 0%, #1e40af 100%);
+  color: white;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+.sidebar h3 {
+  color: white;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+/* Input groups */
+.input-group {
+  background: var(--card-bg);
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.input-group h5 {
+  color: var(--primary-blue);
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+/* Button */
+.btn-primary-custom {
+  background: linear-gradient(45deg, var(--secondary-blue), var(--primary-blue));
+  border: none;
+  padding: 0.75rem 2rem;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.btn-primary-custom:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
+}
+
+/* Prediction output */
+.prediction-card {
+  background: linear-gradient(135deg, var(--card-bg) 0%, #f1f5f9 100%);
+}
+
+.gauge-container {
+  text-align: center;
+  padding: 2rem;
+}
+
+.risk-high {
+  background: linear-gradient(45deg, #ef4444, #dc2626);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: bold;
+}
+
+.risk-medium {
+  background: linear-gradient(45deg, var(--accent-orange), #ea580c);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: bold;
+}
+
+.risk-low {
+  background: linear-gradient(45deg, var(--success-green), #059669);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: bold;
+}
+
+/* SHAP plot */
+.shap-container {
+  height: 500px;
+  overflow: hidden;
+}
+
+.shap-waterfall {
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+/* Sliders */
+.dcc__slider {
+  margin: 1rem 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    min-height: auto;
+    order: 2;
+  }
+  
+  .main-content {
+    order: 1;
+  }
+  
+  .input-group {
+    padding: 1rem;
+  }
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+/* Loading spinner */
+.loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid var(--secondary-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+

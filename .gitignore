@@ -40,4 +40,5 @@ data/processed/*.csv
 
 # Logs
 *.log
+
 EOF
