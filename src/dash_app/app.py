@@ -6,6 +6,7 @@ from dash import html, dcc, Input, Output, State, callback
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import logging
+from flask import send_from_directory  # ← FIX 1: import for static route
 
 # ========================== APP SETUP ==========================
 app = dash.Dash(
@@ -18,6 +19,7 @@ app = dash.Dash(
 # Paths (relative to src/dash_app/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(BASE_DIR, "models")
+FIGURES_DIR = os.path.join(BASE_DIR, "figures")  # ← FIX 2: point at src/figures/
 
 PREPROCESSOR_PATH = os.path.join(MODEL_DIR, "preprocessor.joblib")
 CHAMPION_MODEL_PATH = os.path.join(MODEL_DIR, "champion_model.joblib")
@@ -31,35 +33,39 @@ except Exception as e:
     logging.error(f"❌ Model load failed: {e}")
     preprocessor = model = None
 
+
+# ← FIX 3: Flask route that serves every file inside src/figures/
+@app.server.route("/figures/<path:filename>")
+def serve_figure(filename):
+    return send_from_directory(FIGURES_DIR, filename)
+
+
 # ======================= FEATURE ENGINEERING (matches your pipeline) =======================
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    
-    # Binary indicators from categorical services
+
     df['NoInternet'] = (df['InternetService'] == 'No').astype(int)
     df['FiberOptic'] = (df['InternetService'] == 'Fiber optic').astype(int)
-    
+
     df['Has_TechSupport'] = (df['TechSupport'] == 'Yes').astype(int)
     df['Has_OnlineSecurity'] = (df['OnlineSecurity'] == 'Yes').astype(int)
-    
-    # Combined streaming flag (common pattern in churn models)
+
     df['Has_Streaming'] = (
-        (df['StreamingTV'] == 'Yes') | 
+        (df['StreamingTV'] == 'Yes') |
         (df['StreamingMovies'] == 'Yes')
     ).astype(int)
-    
-    # Tenure binned group (exact categories used in your notebooks)
+
     df['TenureGroup'] = pd.cut(
         df['tenure'],
         bins=[0, 12, 24, 48, 72, float('inf')],
         labels=['0-12', '12-24', '24-48', '48-72', '72+'],
         right=False
     ).astype(str)
-    
-    # Average monthly charge (handles tenure=0 edge case)
+
     df['AvgMonthlyCharge'] = df['TotalCharges'] / df['tenure'].replace(0, 1)
-    
+
     return df
+
 
 # ======================= INPUT FIELDS =======================
 def create_input(label: str, input_id: str, options=None, value_type="text", min_val=None, max_val=None, value=None):
@@ -92,6 +98,7 @@ def create_input(label: str, input_id: str, options=None, value_type="text", min
                 width=7,
             )
         ], className="mb-1")
+
 
 form_inputs = [
     create_input("Gender", "gender", ["Female", "Male"]),
@@ -146,9 +153,18 @@ app.layout = dbc.Container([
             dbc.Card([
                 dbc.CardBody([
                     dcc.Tabs([
-                        dcc.Tab(label="Model Comparison", children=html.Img(src="/assets/model_comparison.png", style={"width": "100%", "max-height": "400px"})),
-                        dcc.Tab(label="Feature Importance", children=html.Img(src="/assets/lightgbm_feature_importance.png", style={"width": "100%", "max-height": "400px"})),
-                        dcc.Tab(label="SHAP Summary", children=html.Img(src="/assets/shap_summary.png", style={"width": "100%", "max-height": "400px"})),
+                        dcc.Tab(label="Model Comparison", children=html.Img(
+                            src="/figures/model_comparison.png",
+                            style={"width": "100%", "max-height": "auto"}
+                        )),
+                        dcc.Tab(label="Feature Importance", children=html.Img(
+                            src="/figures/lightgbm_feature_importance.png",
+                            style={"width": "100%", "max-height": "auto"}
+                        )),
+                        dcc.Tab(label="SHAP Summary", children=html.Img(
+                            src="/figures/shap_summary.png",
+                            style={"width": "100%", "max-height": "auto"}
+                        )),
                     ]),
                 ])
             ], className="shadow"),
@@ -160,6 +176,7 @@ app.layout = dbc.Container([
                className="text-center text-muted small mt-5"),
     ),
 ], fluid=True, className="py-4")
+
 
 # ======================= CALLBACK =======================
 @callback(
@@ -182,7 +199,6 @@ def predict_churn(n_clicks, *args):
     if preprocessor is None or model is None:
         return html.Div("❌ Model not loaded. Check console logs.", className="text-danger")
 
-    # Build raw input
     input_dict = {
         "gender": args[0],
         "SeniorCitizen": int(args[1]),
@@ -207,10 +223,7 @@ def predict_churn(n_clicks, *args):
 
     try:
         X_raw = pd.DataFrame([input_dict])
-        
-        # ← THIS IS THE FIX: Apply same engineering as your training pipeline
         X_engineered = engineer_features(X_raw)
-        
         X_processed = preprocessor.transform(X_engineered)
 
         proba = model.predict_proba(X_processed)[0, 1]
@@ -244,6 +257,7 @@ def predict_churn(n_clicks, *args):
 
     except Exception as e:
         return html.Div(f"❌ Prediction error: {str(e)}", className="text-danger")
+
 
 if __name__ == "__main__":
     app.run_server(debug=True, host="127.0.0.1", port=8050)
