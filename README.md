@@ -106,7 +106,7 @@ app.py
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/CYO-Project-MLG382.git
+git clone https://github.com/Armand-JV/CYO-Project-MLG382
 cd CYO-Project-MLG382
 ```
 
