@@ -3,10 +3,10 @@
 **Predict whether a customer will churn (cancel their subscription) in the next month**  
 **Project Type**: End-to-end Machine Learning + Interactive Web Application (CYO Capstone)
 
-![Project Banner](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
-![Project Banner](https://img.shields.io/badge/Dash-FF6600?logo=plotly&logoColor=white)
-![Project Banner](https://img.shields.io/badge/Render-46E3B7?logo=render&logoColor=white)
-![Project Banner](https://img.shields.io/badge/Scikit--learn-F7931E?logo=scikit-learn&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![Dash](https://img.shields.io/badge/Dash-FF6600?logo=plotly&logoColor=white)
+![Render](https://img.shields.io/badge/Render-46E3B7?logo=render&logoColor=white)
+![Scikit-learn](https://img.shields.io/badge/Scikit--learn-F7931E?logo=scikit-learn&logoColor=white)
 
 ---
 
@@ -24,100 +24,222 @@ Predict customer churn for a telecommunications company using demographics and s
 
 ## Tech Stack
 
-| Layer              | Technology                                      | Purpose |
-|--------------------|-------------------------------------------------|---------|
-| **Language**       | Python 3.10+                                    | Core |
-| **Data Handling**  | pandas, numpy                                   | EDA & preprocessing |
-| **Visualization**  | matplotlib, seaborn                             | Exploratory analysis |
-| **Preprocessing**  | scikit-learn (ColumnTransformer, StandardScaler, OneHotEncoder) | Pipeline |
-| **Modeling**       | scikit-learn, XGBoost, LightGBM                 | Classification |
-| **Web App**        | Plotly Dash + HTML/CSS/JS                       | Interactive UI & predictions |
-| **Model Serving**  | Joblib                                          | Model persistence |
-| **Deployment**     | Render (Free tier)                              | Live web service |
-| **Environment**    | requirements.txt + virtualenv                   | Reproducibility |
-| **Notebook**       | Jupyter                                         | Phase 1 & 2 |
+| Layer              | Technology                                                              | Purpose                        |
+|--------------------|-------------------------------------------------------------------------|--------------------------------|
+| **Language**       | Python 3.11+                                                            | Core                           |
+| **Data Handling**  | pandas, numpy                                                           | EDA & preprocessing            |
+| **Visualization**  | matplotlib, seaborn, SHAP                                               | Exploratory analysis & explainability |
+| **Preprocessing**  | scikit-learn (ColumnTransformer, StandardScaler, OneHotEncoder)         | Pipeline                       |
+| **Modeling**       | scikit-learn, XGBoost, LightGBM                                         | Classification                 |
+| **Web App**        | Plotly Dash + HTML/CSS/JS                                               | Interactive UI & predictions   |
+| **Model Serving**  | Joblib                                                                  | Model persistence              |
+| **Deployment**     | Render (Free tier)                                                      | Live web service               |
+| **Data Download**  | Kaggle API                                                              | Automated dataset retrieval    |
+| **Environment**    | requirements.txt + virtualenv                                           | Reproducibility                |
+| **Notebook**       | Jupyter (nbconvert)                                                     | Model training pipeline        |
 
 ---
 
-## Models Used & Their Purpose
-0X_model_training_evaluation.ipynb will train and compare four models. Each was chosen for specific strengths: 
+## Models Trained
 
-- **Logistic Regression** (Baseline, high interpretability, fast inference)
-- **Random Forrest** (Handles non-linear relationships & interactions)
-- **XGBoost** (Best overall performance on tabular data)
-- **LightGBM** (Fastest training on large datasets, memory efficient)
+Four models are trained and compared in the pipeline. Each was chosen for specific strengths:
 
-### Evaluation Criteria (in order of priority):
+| Model                  | Strength                                                    |
+|------------------------|-------------------------------------------------------------|
+| **Logistic Regression**| Baseline, high interpretability, fast inference             |
+| **Random Forest**      | Handles non-linear relationships & feature interactions     |
+| **XGBoost**            | Best overall performance on tabular data                    |
+| **LightGBM**           | Fastest training on large datasets, memory efficient        |
 
-- F1-score (primary business metric)
-- PR-AUC (handles class imbalance ~26.5% churn)
-- ROC-AUC
-- Training time & inference latency
+### Evaluation Criteria (in order of priority)
 
-Champion Model will be selected based on stratified 5-fold CV + final test set performance. Class imbalance will be handled via class_weight='balanced' / scale_pos_weight / SMOTE.
+1. F1-score (primary business metric)
+2. PR-AUC (handles class imbalance ~26.5% churn rate)
+3. ROC-AUC
+4. Training time & inference latency
+
+The **champion model** is selected based on stratified 5-fold cross-validation + final test set performance. Class imbalance is handled via `class_weight='balanced'` / `scale_pos_weight`.
 
 ---
-## Dev guide
-****IMPORTANT: The .gitignore doesn't commit any datasets.  Also .gitignore doesn't commit any models or figures as to stay current and not overbloat the repo.****
 
-### How to run(run pipline)
+## How It Works — Full Pipeline
 
-1. Run the "run_all_notebooks.py" in /src
-2. Run the "test_pipeline.py" in /tests
-3. Run the "app.py" in /src/dash_app
+The application is fully automated. Starting `app.py` triggers the entire pipeline end-to-end:
 
-This initilizes all of the models and tests the predictor. Then Starts the frontend with the "app.py"  
+```
+app.py
+  └── bootstrap.py          ← Checks if data, models & figures exist
+        └── download_data.py    ← Downloads dataset from Kaggle API if missing
+        └── run_all_notebooks.py ← Runs notebooks sequentially if models/figures missing
+              ├── 01_eda_and_preprocessing.ipynb
+              ├── 02a_logistic_regression.ipynb
+              ├── 02b_random_forest.ipynb
+              ├── 02c_xgboost.ipynb
+              ├── 02d_lightgbm.ipynb
+              └── 03_model_training_evaluation.ipynb
+  └── pipeline.py           ← Provides prediction functions to the Dash frontend
+```
 
-### Dependancies
-To make sure you have all the dependancies before trying to run and make sure you are on Python 3.10+
-RUN:
+### Step-by-step breakdown
 
+1. **`app.py`** starts the Dash web application. Before serving any pages it calls `bootstrap.py`.
+2. **`bootstrap.py`** checks whether the raw dataset, trained model files, and figures already exist on disk.
+   - If anything is missing, it triggers the steps below automatically.
+   - If everything is present, it skips straight to launching the app.
+3. **`download_data.py`** connects to the Kaggle API using credentials stored in `.env` and downloads the Telco Customer Churn dataset into `data/raw/`.
+4. **`run_all_notebooks.py`** executes all Jupyter notebooks in sequential order using `nbconvert`, producing:
+   - Processed training/test data in `data/processed/`
+   - Trained model `.joblib` files in `src/models/`
+   - Evaluation figures in `src/figures/`
+   - A champion model (`champion_model.joblib`) selected by highest F1-score
+5. **`pipeline.py`** exposes the preprocessing and prediction logic used by the Dash frontend to score new customer inputs in real time.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- A [Kaggle account](https://www.kaggle.com/) with an API key
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Armand-JV/CYO-Project-MLG382
+cd CYO-Project-MLG382
+```
+
+### 2. Create and activate a virtual environment
+
+```bash
+python -m venv venv311
+# Windows
+venv311\Scripts\activate
+# macOS/Linux
+source venv311/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-### Dataset Download
-Download the dataset at the link below and put it in ***/data/raw***.
+### 4. Configure Kaggle API credentials
 
-https://www.kaggle.com/datasets/blastchar/telco-customer-churn/data
-#### Model details and creation
-Look inside notebooks directory and run 01_eda_and_preprocessing.ipynb first it will create the **training data for you to use** to train the other models listed above. 
-The idea goes to run each notebook sequentially acording to its number 1, 2, 3 and so on. 
-Each model notebook needs to create a **.joblib** model.
-Then the last notebook will run the models against each other to test which one is the most accurate it will be decided the winner:
-0X_model_training_evaluation.ipynb
+Create a `.env` file in the project root with your Kaggle credentials:
+
+```
+KAGGLE_USERNAME=your_kaggle_username
+KAGGLE_KEY=your_kaggle_api_key
+```
+
+> You can find your API key at [kaggle.com](https://www.kaggle.com/) → Account → API → Create New Token.
+
+### 5. Run the application
+
+```bash
+python src/dash_app/app.py
+```
+
+That's it. The bootstrap process will automatically download the dataset, train all models, generate figures, and launch the web app. On first run this will take several minutes. Subsequent runs skip straight to the app.
+
+---
+
+## Running Components Individually
+
+If you prefer to run the pipeline steps manually:
+
+```bash
+# Step 1 – Download dataset only
+python src/download_data.py
+
+# Step 2 – Run all training notebooks
+python src/run_all_notebooks.py
+
+# Step 3 – Run tests
+pytest tests/test_pipeline.py
+
+# Step 4 – Launch the web app
+python src/dash_app/app.py
+```
+
+---
+
+## Testing
+
+```bash
+pytest tests/test_pipeline.py
+```
+
+The test suite validates that the preprocessing pipeline and prediction functions in `pipeline.py` behave correctly before the app is served.
 
 ---
 
 ## Project Structure
 
-```bash
-└── CYO-Project-MLG382
-    └── .github
-        └── workflows
-    └── data
-        └── processed
-            ├── X_test_processed.csv
-            ├── X_train_processed.csv
-            ├── y_test.csv
-            ├── y_train.csv
-        └── raw
-            ├── WA_Fn-UseC_-Telco-Customer-Churn.csv
-    └── notebooks
-        ├── 01_eda_and_preprocessing.ipynb
-        ├── 02a_logistic_regression.ipynb
-    └── src
-        └── dash_app
-        └── figures
-            ├── churn_by_category.png
-            ├── correlation_with_churn.png
-            ├── logreg_evaluation.png
-            ├── num_distributions.png
-            ├── tenure_vs_churn.png
-        └── models
-            ├── logistic_regression.joblib
-            ├── logreg_search.joblib
-            ├── preprocessor.joblib
-        └── utils
-    ├── .gitignore
-    ├── README.md
-    └── requirements.txt
 ```
+CYO-Project-MLG382/
+├── data/
+│   ├── raw/                        ← Downloaded by download_data.py (git-ignored)
+│   │   └── WA_Fn-UseC_-Telco-Customer-Churn.csv
+│   └── processed/                  ← Generated by notebook 01 (git-ignored)
+│       ├── X_train_processed.csv
+│       ├── X_test_processed.csv
+│       ├── y_train.csv
+│       ├── y_test.csv
+│       └── model_comparison.csv
+│
+├── notebooks/
+│   ├── 01_eda_and_preprocessing.ipynb      ← EDA + feature engineering + train/test split
+│   ├── 02a_logistic_regression.ipynb       ← Logistic Regression training
+│   ├── 02b_random_forest.ipynb             ← Random Forest training
+│   ├── 02c_xgboost.ipynb                   ← XGBoost training
+│   ├── 02d_lightgbm.ipynb                  ← LightGBM training
+│   └── 03_model_training_evaluation.ipynb  ← Model comparison + champion selection + SHAP
+│
+├── src/
+│   ├── bootstrap.py                ← Checks environment; triggers download + training if needed
+│   ├── download_data.py            ← Kaggle API integration; downloads raw dataset
+│   ├── run_all_notebooks.py        ← Executes notebooks sequentially via nbconvert
+│   ├── pipeline.py                 ← Preprocessing + prediction functions for the frontend
+│   │
+│   ├── dash_app/
+│   │   ├── app.py                  ← Dash application entry point
+│   │   └── assets/
+│   │       └── style.css
+│   │
+│   ├── models/                     ← Trained model files (git-ignored)
+│   │   ├── preprocessor.joblib
+│   │   ├── champion_model.joblib
+│   │   ├── feature_names.joblib
+│   │   ├── logistic_regression.joblib
+│   │   ├── random_forest.joblib
+│   │   ├── xgboost.joblib
+│   │   └── lightgbm.joblib
+│   │
+│   └── figures/                    ← Generated plots (git-ignored)
+│       ├── shap_global_importance.png
+│       ├── shap_summary.png
+│       ├── model_comparison.png
+│       └── ...
+│
+├── tests/
+│   └── test_pipeline.py
+│
+├── .env                            ← Kaggle API credentials (git-ignored)
+├── .gitignore
+├── requirements.txt
+└── README.md
+```
+
+> **Note**: `.gitignore` excludes all datasets, trained models, and generated figures to keep the repository lightweight and always current. These are regenerated automatically on first run.
+
+---
+
+## Important Notes
+
+- **First run takes time.** Training four models with hyperparameter search (RandomizedSearchCV, 5-fold CV) across the full dataset takes several minutes. Subsequent runs are instant as long as model files are present.
+- **Do not manually place files in `data/raw/` or `src/models/`** unless you intend to skip the automated pipeline — `bootstrap.py` checks for their existence to decide whether to regenerate them.
+- **Kaggle credentials are required** for the automated dataset download. Without a valid `.env`, `download_data.py` will fail and you will need to manually download the dataset from [Kaggle](https://www.kaggle.com/datasets/blastchar/telco-customer-churn/data) and place it in `data/raw/`.
