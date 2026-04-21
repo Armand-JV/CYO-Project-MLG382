@@ -191,6 +191,7 @@ def collect_inputs(*values):
 
 @callback(
     [Output('prediction-output', 'children'),
+     Output('shap-explanation', 'children'),
      Output('shap-explanation', 'style')],
     Input('predict-btn', 'n_clicks'),
     State('input-data-store', 'data'),
@@ -204,8 +205,9 @@ def make_prediction(n_clicks, input_data):
         # Input as dict
         input_df = pd.DataFrame([input_data])
 
-        # Predict
-        prob = predictor.predict_proba(input_df)[0]
+        # Predict - get probability for churn class (class 1)
+        prob_array = predictor.predict_proba(input_df)[0]
+        prob = prob_array[1] if len(prob_array) > 1 else prob_array[0]
         pred = predictor.predict(input_df)[0]
 
         # Risk level
@@ -257,20 +259,37 @@ def make_prediction(n_clicks, input_data):
         # Simple SHAP bar (full waterfall needs shap.html, approx with plotly)
         shap_df = pd.DataFrame({
             'feature': shap_data['feature_names'],
-            'shap': shap_data['shap_values'],
-            'sign': np.sign(shap_data['shap_values'])
+            'shap': shap_data['shap_values']
         }).sort_values('shap', key=abs, ascending=False).head(10)
+        
+        # Create color mapping based on positive/negative values
+        colors = ['#d62728' if x < 0 else '#2ca02c' for x in shap_df['shap']]
 
-        fig_shap = px.bar(shap_df.head(10), x='shap', y='feature', orientation='h',
-                          color='sign', color_continuous_scale=['red', 'green'],
-                          title='Top SHAP Feature Contributions to Churn')
+        fig_shap = go.Figure(go.Bar(
+            x=shap_df['shap'],
+            y=shap_df['feature'],
+            orientation='h',
+            marker=dict(color=colors),
+            name='SHAP Value'
+        ))
+        fig_shap.update_layout(
+            title='Top 10 SHAP Feature Contributions to Churn',
+            xaxis_title='SHAP Value',
+            yaxis_title='Feature',
+            height=400,
+            showlegend=False
+        )
 
         shap_viz = dcc.Graph(figure=fig_shap)
+        shap_content = html.Div([
+            html.H5('Model Explanation', className='mb-3'),
+            shap_viz
+        ])
 
-        return output, shap_style
+        return output, shap_content, shap_style
 
     except Exception as e:
-        return html.Div(f'Error: {str(e)}', className='alert alert-danger'), {'display': 'none'}
+        return html.Div(f'Error: {str(e)}', className='alert alert-danger'), None, {'display': 'none'}
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='127.0.0.1', port=8050)
