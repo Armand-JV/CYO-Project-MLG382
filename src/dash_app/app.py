@@ -6,9 +6,9 @@ from dash import html, dcc, Input, Output, State, callback
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import logging
-from flask import send_from_directory  # ← FIX 1: import for static route
+from flask import send_from_directory
 
-# ========================== APP SETUP ==========================
+#APP SETUP
 app = dash.Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP, "/assets/style.css"],
@@ -19,12 +19,19 @@ app = dash.Dash(
 # Paths (relative to src/dash_app/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(BASE_DIR, "models")
-FIGURES_DIR = os.path.join(BASE_DIR, "figures")  # ← FIX 2: point at src/figures/
+FIGURES_DIR = os.path.join(BASE_DIR, "figures")
 
 PREPROCESSOR_PATH = os.path.join(MODEL_DIR, "preprocessor.joblib")
 CHAMPION_MODEL_PATH = os.path.join(MODEL_DIR, "champion_model.joblib")
 
-# Load once at startup
+
+# Flask route — serves every file inside src/figures/
+@app.server.route("/figures/<path:filename>")
+def serve_figure(filename):
+    return send_from_directory(FIGURES_DIR, filename)
+
+
+#MODEL LOAD
 try:
     preprocessor = joblib.load(PREPROCESSOR_PATH)
     model = joblib.load(CHAMPION_MODEL_PATH)
@@ -34,13 +41,32 @@ except Exception as e:
     preprocessor = model = None
 
 
-# ← FIX 3: Flask route that serves every file inside src/figures/
-@app.server.route("/figures/<path:filename>")
-def serve_figure(filename):
-    return send_from_directory(FIGURES_DIR, filename)
+#CHAMPION FIGURE RESOLUTION
+# Maps sklearn/xgb/lgbm class names → the corresponding saved figure filename.
+FEATURE_IMPORTANCE_MAP = {
+    "LogisticRegression":     "logreg_coefficients.png",
+    "RandomForestClassifier": "randomforest_feature_importance.png",
+    "XGBClassifier":          "xgboost_feature_importance.png",
+    "LGBMClassifier":         "lightgbm_feature_importance.png",
+}
+FEATURE_IMPORTANCE_FALLBACK = "lightgbm_feature_importance.png"
+
+def resolve_champion_figure(loaded_model) -> tuple[str, str]:
+    """
+    Returns (figure_filename, model_display_name) for the champion model.
+    Falls back to LightGBM if the class isn't in the map.
+    """
+    if loaded_model is None:
+        return FEATURE_IMPORTANCE_FALLBACK, "Unknown"
+    class_name = type(loaded_model).__name__
+    figure = FEATURE_IMPORTANCE_MAP.get(class_name, FEATURE_IMPORTANCE_FALLBACK)
+    logging.info(f"Champion class: {class_name} → figure: {figure}")
+    return figure, class_name
+
+CHAMPION_FEATURE_FIGURE, CHAMPION_MODEL_NAME = resolve_champion_figure(model)
 
 
-# ======================= FEATURE ENGINEERING (matches your pipeline) =======================
+#FEATURE ENGINEERING
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
@@ -67,8 +93,8 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ======================= INPUT FIELDS =======================
-def create_input(label: str, input_id: str, options=None, value_type="text", min_val=None, max_val=None, value=None):
+#INPUT FIELDS
+def create_input(label, input_id, options=None, value_type="text", min_val=None, max_val=None, value=None):
     if options:
         return dbc.Row([
             dbc.Col(html.Label(label, className="form-label col-form-label"), width=5),
@@ -135,36 +161,52 @@ sidebar = dbc.Card(
     className="shadow",
 )
 
-# ======================= LAYOUT =======================
+#LAYOUT
 app.layout = dbc.Container([
-    dbc.Row(dbc.Col(html.H1("Telco Customer Churn Predictor", className="text-center text-primary my-4"), width=12)),
+    dbc.Row(dbc.Col(
+        html.H1("Telco Customer Churn Predictor", className="text-center text-primary my-4"),
+        width=12
+    )),
 
     dbc.Row([
         dbc.Col(sidebar, width=5),
 
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader(html.H5("📊 Prediction Result", className="mb-0")),
+                dbc.CardHeader(html.H5(f"📊 Prediction Result: {CHAMPION_MODEL_NAME}", className="mb-0")),
                 dbc.CardBody(id="prediction-output", children=[
-                    html.Div("Fill the form on the left and click 'Predict Churn'", className="text-muted text-center py-5")
+                    html.Div(
+                        "Fill the form on the left and click 'Predict Churn'",
+                        className="text-muted text-center py-5"
+                    )
                 ]),
             ], className="shadow mb-4"),
 
             dbc.Card([
                 dbc.CardBody([
                     dcc.Tabs([
-                        dcc.Tab(label="Model Comparison", children=html.Img(
-                            src="/figures/model_comparison.png",
-                            style={"width": "100%", "max-height": "auto"}
-                        )),
-                        dcc.Tab(label="Feature Importance", children=html.Img(
-                            src="/figures/lightgbm_feature_importance.png",
-                            style={"width": "100%", "max-height": "auto"}
-                        )),
-                        dcc.Tab(label="SHAP Summary", children=html.Img(
-                            src="/figures/shap_summary.png",
-                            style={"width": "100%", "max-height": "auto"}
-                        )),
+                        dcc.Tab(
+                            label="Model Comparison",
+                            children=html.Img(
+                                src="/figures/model_comparison.png",
+                                style={"width": "100%", "max-height": "auto"}
+                            )
+                        ),
+                        # Dynamically resolves to the champion model's own figure
+                        dcc.Tab(
+                            label=f"Feature Importance ({CHAMPION_MODEL_NAME})",
+                            children=html.Img(
+                                src=f"/figures/{CHAMPION_FEATURE_FIGURE}",
+                                style={"width": "100%", "max-height": "auto"}
+                            )
+                        ),
+                        dcc.Tab(
+                            label="SHAP Summary",
+                            children=html.Img(
+                                src="/figures/shap_summary.png",
+                                style={"width": "100%", "max-height": "auto"}
+                            )
+                        ),
                     ]),
                 ])
             ], className="shadow"),
@@ -172,13 +214,15 @@ app.layout = dbc.Container([
     ], className="g-4"),
 
     html.Footer(
-        html.P("MLG382 CYO Project • Champion: LightGBM • Deployed with Dash",
-               className="text-center text-muted small mt-5"),
+        html.P(
+            f"MLG382 CYO Project • Champion: {CHAMPION_MODEL_NAME} • Deployed with Dash",
+            className="text-center text-muted small mt-5"
+        ),
     ),
 ], fluid=True, className="py-4")
 
 
-# ======================= CALLBACK =======================
+#CALLBACK
 @callback(
     Output("prediction-output", "children"),
     Input("predict-btn", "n_clicks"),
@@ -252,7 +296,7 @@ def predict_churn(n_clicks, *args):
             html.H5(f"Probability: {proba:.1%}  •  Risk Level: {risk}", className="text-center"),
             dcc.Graph(figure=gauge, config={"displayModeBar": False}),
             html.Hr(),
-            html.P("✅ Feature engineering applied • Matches your trained pipeline", className="text-success small"),
+            html.P("✅ Feature engineering applied • Matches trained pipeline", className="text-success small"),
         ]
 
     except Exception as e:
