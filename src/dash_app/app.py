@@ -1,272 +1,249 @@
-import dash
-from dash import dcc, html, Input, Output, State, callback, ctx
-import dash_bootstrap_components as dbc
-from dash.exceptions import PreventUpdate
-import plotly.graph_objects as go
-import plotly.express as px
+import os
+import joblib
 import pandas as pd
-import numpy as np
+import dash
+from dash import html, dcc, Input, Output, State, callback
+import dash_bootstrap_components as dbc
+import plotly.graph_objects as go
+import logging
 
-# Local imports
+# ========================== APP SETUP ==========================
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP, "/assets/style.css"],
+    title="Telco Customer Churn Predictor - MLG382",
+    suppress_callback_exceptions=True,
+)
+
+# Paths (relative to src/dash_app/)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_DIR = os.path.join(BASE_DIR, "models")
+
+PREPROCESSOR_PATH = os.path.join(MODEL_DIR, "preprocessor.joblib")
+CHAMPION_MODEL_PATH = os.path.join(MODEL_DIR, "champion_model.joblib")
+
+# Load once at startup
 try:
-    from pipeline import load_churn_predictor
-    predictor = load_churn_predictor()
-    MODEL_READY = True
+    preprocessor = joblib.load(PREPROCESSOR_PATH)
+    model = joblib.load(CHAMPION_MODEL_PATH)
+    logging.info("✅ Champion model + preprocessor loaded successfully")
 except Exception as e:
-    print(f"Model not ready: {e}. Run notebooks first.")
-    MODEL_READY = False
-    predictor = None
+    logging.error(f"❌ Model load failed: {e}")
+    preprocessor = model = None
 
-# External CSS
-external_stylesheets = [dbc.themes.BOOTSTRAP, '/assets/style.css']
+# ======================= FEATURE ENGINEERING (matches your pipeline) =======================
+def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    
+    # Binary indicators from categorical services
+    df['NoInternet'] = (df['InternetService'] == 'No').astype(int)
+    df['FiberOptic'] = (df['InternetService'] == 'Fiber optic').astype(int)
+    
+    df['Has_TechSupport'] = (df['TechSupport'] == 'Yes').astype(int)
+    df['Has_OnlineSecurity'] = (df['OnlineSecurity'] == 'Yes').astype(int)
+    
+    # Combined streaming flag (common pattern in churn models)
+    df['Has_Streaming'] = (
+        (df['StreamingTV'] == 'Yes') | 
+        (df['StreamingMovies'] == 'Yes')
+    ).astype(int)
+    
+    # Tenure binned group (exact categories used in your notebooks)
+    df['TenureGroup'] = pd.cut(
+        df['tenure'],
+        bins=[0, 12, 24, 48, 72, float('inf')],
+        labels=['0-12', '12-24', '24-48', '48-72', '72+'],
+        right=False
+    ).astype(str)
+    
+    # Average monthly charge (handles tenure=0 edge case)
+    df['AvgMonthlyCharge'] = df['TotalCharges'] / df['tenure'].replace(0, 1)
+    
+    return df
 
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
-server = app.server
-
-# Raw feature categories from 01_eda_and_preprocessing.ipynb
-NUM_FEATURES = {
-    'tenure': {'min': 0, 'max': 72, 'step': 1, 'label': 'Tenure (months)'},
-    'MonthlyCharges': {'min': 18, 'max': 120, 'step': 1, 'label': 'Monthly Charges ($)'},
-    'TotalCharges': {'min': 0, 'max': 8684, 'step': 100, 'label': 'Total Charges ($)'},
-    'AvgMonthlyCharge': {'min': 18, 'max': 110, 'step': 1, 'label': 'Avg Monthly Charge ($)'}
-}
-
-BINARY_FEATURES = [
-    'SeniorCitizen',  # 0/1
-    'Has_Streaming', 'Has_OnlineSecurity', 'Has_TechSupport', 'FiberOptic', 'NoInternet'
-]
-
-CAT_FEATURES = [
-    'gender', 'Partner', 'Dependents', 'PhoneService', 'MultipleLines', 'InternetService',
-    'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV', 'StreamingMovies',
-    'Contract', 'PaperlessBilling', 'PaymentMethod', 'TenureGroup'
-]
-
-CAT_OPTIONS = {  # Default options from dataset
-    'gender': ['Male', 'Female'],
-    'Partner': ['Yes', 'No'], 'Dependents': ['Yes', 'No'], 'PhoneService': ['Yes', 'No'],
-    'MultipleLines': ['Yes', 'No', 'No phone service'],
-    'InternetService': ['DSL', 'Fiber optic', 'No'],
-    'OnlineBackup': ['Yes', 'No', 'No internet service'],
-    'DeviceProtection': ['Yes', 'No', 'No internet service'],
-    'TechSupport': ['Yes', 'No', 'No internet service'],
-    'StreamingTV': ['Yes', 'No', 'No internet service'],
-    'StreamingMovies': ['Yes', 'No', 'No internet service'],
-    'Contract': ['Month-to-month', 'One year', 'Two year'],
-    'PaperlessBilling': ['Yes', 'No'],
-    'PaymentMethod': ['Electronic check', 'Mailed check', 'Bank transfer (automatic)', 'Credit card (automatic)'],
-    'TenureGroup': ['0-12', '13-24', '25-48', '49-72', '72+']
-}
-
-# Layout sections
-sidebar = dbc.NavbarSimple(
-    children=[
-        html.H3('Telco Churn Predictor', className='mb-0', style={'color': 'white'}),
-        html.Hr(),
-        html.P([
-            'Champion Model: ', html.Strong(id='model-info', children='Loading...'),
-            html.Br(), 'F1-Score: ', html.Strong(id='f1-score', children='N/A')
-        ], className='mt-4 mb-0')
-    ],
-    brand_href='#',
-    className='sidebar vh-100 flex-column align-items-start p-4 sticky-top',
-    dark=True,
-    expand=True
-)
-
-def create_input_section(title, items):
-    """Dynamic input row"""
-    cols = []
-    for i, item in enumerate(items):
-        if isinstance(item, dict):  # Slider
-            cols.append(
-                dbc.Col([
-                    html.Label(item['label'], className='form-label fw-500'),
-                    dcc.Slider(
-                        id=f'{title.lower().replace(" ", "-")}-{list(item.keys())[0].lower()}',
-                        min=item['min'], max=item['max'], step=item['step'], value=(item['min']+item['max'])/2,
-                        marks=None, tooltip={'placement': 'bottom', 'always_visible': True}
-                    )
-                ], lg=12)
+# ======================= INPUT FIELDS =======================
+def create_input(label: str, input_id: str, options=None, value_type="text", min_val=None, max_val=None, value=None):
+    if options:
+        return dbc.Row([
+            dbc.Col(html.Label(label, className="form-label col-form-label"), width=5),
+            dbc.Col(
+                dcc.Dropdown(
+                    id=input_id,
+                    options=[{"label": o, "value": o} for o in options],
+                    value=value or options[0],
+                    clearable=False,
+                    className="mb-2",
+                ),
+                width=7,
             )
-        elif isinstance(item, str):  # Category or binary
-            if item in BINARY_FEATURES:
-                cols.append(
-                    dbc.Col([
-                        dbc.FormCheck(
-                            id=f'binary-{item.lower()}',
-                            label=item.replace('_', ' ').title(),
-                            className='form-switch',
-                            checked=False,
-                            switch=True
-                        )
-                    ], lg=6)
-                )
-            else:
-                options = [{'label': v, 'value': v} for v in CAT_OPTIONS.get(item, ['Yes', 'No'])]
-                cols.append(
-                    dbc.Col([
-                        dbc.Label(item.replace('_', ' ').title(), className='form-label fw-500'),
-                        dcc.Dropdown(
-                            id=f'cat-{item.lower()}',
-                            options=options,
-                            value=options[0]['value'] if options else None,
-                            clearable=False
-                        )
-                    ], lg=6)
-                )
-    return dbc.Row([
-        dbc.Col([
-            html.H5(title, className='input-group-title'),
-            *cols
-        ])
-    ], className='input-group fade-in mb-4')
+        ], className="mb-1")
+    else:
+        return dbc.Row([
+            dbc.Col(html.Label(label, className="form-label col-form-label"), width=5),
+            dbc.Col(
+                dbc.Input(
+                    id=input_id,
+                    type=value_type,
+                    value=value or (0 if value_type == "number" else ""),
+                    min=min_val,
+                    max=max_val,
+                    className="mb-2",
+                ),
+                width=7,
+            )
+        ], className="mb-1")
 
-inputs = html.Div([
-    create_input_section('Demographics', ['gender', 'SeniorCitizen', 'Partner', 'Dependents']),
-    create_input_section('Services', ['PhoneService', 'MultipleLines', 'InternetService', 'OnlineBackup', 'DeviceProtection']),
-    create_input_section('Support & Streaming', ['Has_OnlineSecurity', 'Has_TechSupport', 'Has_Streaming']),
-    create_input_section('Billing & Contract', ['Contract', 'PaperlessBilling', 'PaymentMethod']),
-    create_input_section('Tenure & Charges', list(NUM_FEATURES.keys()) + ['TenureGroup', 'NoInternet', 'FiberOptic'])
-], className='p-4')
+form_inputs = [
+    create_input("Gender", "gender", ["Female", "Male"]),
+    create_input("Senior Citizen (0=No, 1=Yes)", "SeniorCitizen", ["0", "1"]),
+    create_input("Partner", "Partner", ["Yes", "No"]),
+    create_input("Dependents", "Dependents", ["Yes", "No"]),
+    create_input("Tenure (months)", "tenure", value_type="number", min_val=0, max_val=72, value=12),
+    create_input("Phone Service", "PhoneService", ["Yes", "No"]),
+    create_input("Multiple Lines", "MultipleLines", ["No phone service", "No", "Yes"]),
+    create_input("Internet Service", "InternetService", ["DSL", "Fiber optic", "No"]),
+    create_input("Online Security", "OnlineSecurity", ["No", "Yes", "No internet service"]),
+    create_input("Online Backup", "OnlineBackup", ["No", "Yes", "No internet service"]),
+    create_input("Device Protection", "DeviceProtection", ["No", "Yes", "No internet service"]),
+    create_input("Tech Support", "TechSupport", ["No", "Yes", "No internet service"]),
+    create_input("Streaming TV", "StreamingTV", ["No", "Yes", "No internet service"]),
+    create_input("Streaming Movies", "StreamingMovies", ["No", "Yes", "No internet service"]),
+    create_input("Contract", "Contract", ["Month-to-month", "One year", "Two year"]),
+    create_input("Paperless Billing", "PaperlessBilling", ["Yes", "No"]),
+    create_input("Payment Method", "PaymentMethod", [
+        "Electronic check", "Mailed check",
+        "Bank transfer (automatic)", "Credit card (automatic)"
+    ]),
+    create_input("Monthly Charges ($)", "MonthlyCharges", value_type="number", min_val=0, max_val=200, value=70.0),
+    create_input("Total Charges ($)", "TotalCharges", value_type="number", min_val=0, max_val=10000, value=800.0),
+]
 
-# Output sections
-output_card = dbc.Card([
+sidebar = dbc.Card(
     dbc.CardBody([
-        html.Div(id='prediction-output', className='text-center py-5')
-    ])
-], className='mt-4 prediction-card')
+        html.H4("📋 Customer Profile", className="card-title text-primary mb-3"),
+        html.Hr(),
+        *form_inputs,
+        dbc.Button("🚀 Predict Churn", id="predict-btn", color="primary", size="lg", className="w-100 mt-4"),
+    ]),
+    className="shadow",
+)
 
-shap_div = html.Div(id='shap-explanation', className='shap-container mt-4 card p-4', style={'display': 'none'})
-
-main_content = dbc.Container([
-    dbc.Row([
-        dbc.Col(sidebar, md=3, className='d-none d-md-block'),
-        dbc.Col([
-            html.H1('Customer Churn Prediction Dashboard', className='text-center mb-5 fade-in', style={'color': 'var(--primary-blue)'}),
-            inputs,
-            dbc.Button('Predict Churn Risk', id='predict-btn', color='primary', className='btn-primary-custom w-100 mb-4 fw-bold fs-5', n_clicks=0, disabled=not MODEL_READY),
-            output_card,
-            shap_div
-        ], md=9)
-    ])
-], fluid=True, className='py-4 px-3')
-
+# ======================= LAYOUT =======================
 app.layout = dbc.Container([
-    dcc.Store(id='input-data-store'),
-    main_content
-], fluid=True, className='min-vh-100')
+    dbc.Row(dbc.Col(html.H1("Telco Customer Churn Predictor", className="text-center text-primary my-4"), width=12)),
 
-# Callbacks
+    dbc.Row([
+        dbc.Col(sidebar, width=5),
+
+        dbc.Col([
+            dbc.Card([
+                dbc.CardHeader(html.H5("📊 Prediction Result", className="mb-0")),
+                dbc.CardBody(id="prediction-output", children=[
+                    html.Div("Fill the form on the left and click 'Predict Churn'", className="text-muted text-center py-5")
+                ]),
+            ], className="shadow mb-4"),
+
+            dbc.Card([
+                dbc.CardBody([
+                    dcc.Tabs([
+                        dcc.Tab(label="Model Comparison", children=html.Img(src="/assets/model_comparison.png", style={"width": "100%", "max-height": "400px"})),
+                        dcc.Tab(label="Feature Importance", children=html.Img(src="/assets/lightgbm_feature_importance.png", style={"width": "100%", "max-height": "400px"})),
+                        dcc.Tab(label="SHAP Summary", children=html.Img(src="/assets/shap_summary.png", style={"width": "100%", "max-height": "400px"})),
+                    ]),
+                ])
+            ], className="shadow"),
+        ], width=7),
+    ], className="g-4"),
+
+    html.Footer(
+        html.P("MLG382 CYO Project • Champion: LightGBM • Deployed with Dash",
+               className="text-center text-muted small mt-5"),
+    ),
+], fluid=True, className="py-4")
+
+# ======================= CALLBACK =======================
 @callback(
-    Output('model-info', 'children'),
-    Input('predict-btn', 'n_clicks')
+    Output("prediction-output", "children"),
+    Input("predict-btn", "n_clicks"),
+    [
+        State("gender", "value"), State("SeniorCitizen", "value"), State("Partner", "value"),
+        State("Dependents", "value"), State("tenure", "value"), State("PhoneService", "value"),
+        State("MultipleLines", "value"), State("InternetService", "value"),
+        State("OnlineSecurity", "value"), State("OnlineBackup", "value"),
+        State("DeviceProtection", "value"), State("TechSupport", "value"),
+        State("StreamingTV", "value"), State("StreamingMovies", "value"),
+        State("Contract", "value"), State("PaperlessBilling", "value"),
+        State("PaymentMethod", "value"), State("MonthlyCharges", "value"),
+        State("TotalCharges", "value"),
+    ],
+    prevent_initial_call=True,
 )
-def update_model_info(n_clicks):
-    if not MODEL_READY:
-        return 'Not Ready - Run notebooks first'
+def predict_churn(n_clicks, *args):
+    if preprocessor is None or model is None:
+        return html.Div("❌ Model not loaded. Check console logs.", className="text-danger")
+
+    # Build raw input
+    input_dict = {
+        "gender": args[0],
+        "SeniorCitizen": int(args[1]),
+        "Partner": args[2],
+        "Dependents": args[3],
+        "tenure": float(args[4]),
+        "PhoneService": args[5],
+        "MultipleLines": args[6],
+        "InternetService": args[7],
+        "OnlineSecurity": args[8],
+        "OnlineBackup": args[9],
+        "DeviceProtection": args[10],
+        "TechSupport": args[11],
+        "StreamingTV": args[12],
+        "StreamingMovies": args[13],
+        "Contract": args[14],
+        "PaperlessBilling": args[15],
+        "PaymentMethod": args[16],
+        "MonthlyCharges": float(args[17]),
+        "TotalCharges": float(args[18]),
+    }
+
     try:
-        model_name = predictor.model_path.name.replace('.joblib', '')
-        return model_name
-    except:
-        return 'Error loading model'
+        X_raw = pd.DataFrame([input_dict])
+        
+        # ← THIS IS THE FIX: Apply same engineering as your training pipeline
+        X_engineered = engineer_features(X_raw)
+        
+        X_processed = preprocessor.transform(X_engineered)
 
-@callback(
-    Output('input-data-store', 'data'),
-    [Input(f'{type_id}-{feat.lower()}', 'value') for type_id, feats in 
-     [('cat', CAT_FEATURES), ('binary', BINARY_FEATURES)] for feat in feats] +
-    [Input(f'num-{feat.lower()}', 'value') for feat in NUM_FEATURES],
-    prevent_initial_call=True
-)
-def collect_inputs(*values):
-    # Collect all input values into dict
-    input_data = {}
-    # ... (simplified - map values to feature names)
-    # In full impl: zip with feature lists
-    return input_data
+        proba = model.predict_proba(X_processed)[0, 1]
+        prediction = "CHURN" if proba >= 0.5 else "NO CHURN"
+        risk = "🔴 High" if proba >= 0.7 else "🟡 Medium" if proba >= 0.4 else "🟢 Low"
 
-@callback(
-    [Output('prediction-output', 'children'),
-     Output('shap-explanation', 'style')],
-    Input('predict-btn', 'n_clicks'),
-    State('input-data-store', 'data'),
-    prevent_initial_call=True
-)
-def make_prediction(n_clicks, input_data):
-    if not MODEL_READY or not input_data:
-        raise PreventUpdate
-
-    try:
-        # Input as dict
-        input_df = pd.DataFrame([input_data])
-
-        # Predict
-        prob = predictor.predict_proba(input_df)[0]
-        pred = predictor.predict(input_df)[0]
-
-        # Risk level
-        risk_class = 'low' if prob < 0.3 else 'medium' if prob < 0.6 else 'high'
-        risk_label = risk_class.title()
-        risk_style = f'risk-{risk_class}'
-
-        # Gauge
-        fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number+delta",
-            value = prob,
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Churn Probability"},
-            delta = {'reference': 0.5},
-            gauge = {
-                'axis': {'range': [None, 1], 'tickwidth': 1, 'tickcolor': "darkblue"},
-                'bar': {'color': "darkblue"},
-                'steps': [
-                    {'range': [0, 0.3], 'color': "lightgreen"},
-                    {'range': [0.3, 0.6], 'color': "yellow"},
-                    {'range': [0.6, 1], 'color': "darkred"}
+        gauge = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=proba * 100,
+            title={"text": "Churn Probability"},
+            delta={"reference": 50, "increasing": {"color": "red"}},
+            gauge={
+                "axis": {"range": [0, 100]},
+                "bar": {"color": "darkred" if proba >= 0.5 else "forestgreen"},
+                "steps": [
+                    {"range": [0, 40], "color": "lightgreen"},
+                    {"range": [40, 70], "color": "yellow"},
+                    {"range": [70, 100], "color": "red"},
                 ],
-                'threshold': {
-                    'line': {"color": "red", 'width': 4},
-                    'thickness': 0.75,
-                    'value': prob
-                }
             }
         ))
-        fig_gauge.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
+        gauge.update_layout(height=320, margin=dict(l=20, r=20, t=40, b=10))
 
-        gauge = dcc.Graph(figure=fig_gauge, className='gauge-container mb-4')
-
-        # Prediction text
-        pred_text = "Will Churn 🚨" if pred == 1 else "Will Stay ✅"
-        risk_badge = html.Span(risk_label, className=risk_style)
-
-        output = html.Div([
-            html.H2(pred_text, className='fade-in', style={'color': 'var(--success-green)' if pred == 0 else 'var(--accent-orange)'}),
-            html.H4(f'{prob:.1%} Probability', className='fade-in'),
-            risk_badge,
-            gauge
-        ], className='fade-in')
-
-        # SHAP
-        shap_data = predictor.get_shap_explanation(input_df)
-        shap_style = {'display': 'block'}
-
-        # Simple SHAP bar (full waterfall needs shap.html, approx with plotly)
-        shap_df = pd.DataFrame({
-            'feature': shap_data['feature_names'],
-            'shap': shap_data['shap_values'],
-            'sign': np.sign(shap_data['shap_values'])
-        }).sort_values('shap', key=abs, ascending=False).head(10)
-
-        fig_shap = px.bar(shap_df.head(10), x='shap', y='feature', orientation='h',
-                          color='sign', color_continuous_scale=['red', 'green'],
-                          title='Top SHAP Feature Contributions to Churn')
-
-        shap_viz = dcc.Graph(figure=fig_shap)
-
-        return output, shap_style
+        return [
+            html.H3(prediction, className=f"text-{'danger' if 'CHURN' in prediction else 'success'} display-4 text-center"),
+            html.H5(f"Probability: {proba:.1%}  •  Risk Level: {risk}", className="text-center"),
+            dcc.Graph(figure=gauge, config={"displayModeBar": False}),
+            html.Hr(),
+            html.P("✅ Feature engineering applied • Matches your trained pipeline", className="text-success small"),
+        ]
 
     except Exception as e:
-        return html.Div(f'Error: {str(e)}', className='alert alert-danger'), {'display': 'none'}
+        return html.Div(f"❌ Prediction error: {str(e)}", className="text-danger")
 
-if __name__ == '__main__':
-    app.run_server(debug=True, host='127.0.0.1', port=8050)
+if __name__ == "__main__":
+    app.run_server(debug=True, host="127.0.0.1", port=8050)

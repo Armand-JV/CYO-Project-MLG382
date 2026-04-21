@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 .venv/
 venv/
+venv312/
 env/
 ENV/
 
@@ -39,4 +40,5 @@ data/processed/*.csv
 
 # Logs
 *.log
+
 EOF
