@@ -23,6 +23,8 @@ app = dash.Dash(
     title="Telco Customer Churn Predictor - MLG382",
     suppress_callback_exceptions=True,
 )
+#Server setup for deployment (e.g., Render)
+server = app.server
 
 # Paths (relative to src/dash_app/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -312,4 +314,8 @@ def predict_churn(n_clicks, *args):
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host="127.0.0.1", port=8050)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        debug=False
+    )
