@@ -1,13 +1,16 @@
 pandas
-numpy
+numpy~=1.26.4
 matplotlib
 seaborn
 plotly
 sweetviz
-ydata-profiling
+# ydata-profiling
 scikit-learn
 xgboost
 jupyter
 lightgbm
 shap
 pytest
+dash==2.17.1
+dash-bootstrap-components==1.6.0
+dash-dangerously-set-inner-html==0.0.5
