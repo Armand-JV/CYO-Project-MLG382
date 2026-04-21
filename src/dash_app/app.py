@@ -1,4 +1,5 @@
 import os
+import sys
 import joblib
 import pandas as pd
 import dash
@@ -7,6 +8,13 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import logging
 from flask import send_from_directory
+
+#Runs boostrap to download raw dataset, and run each notebook for deployment purposes.
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # src/
+sys.path.insert(0, BASE_DIR)   # make src/ importable
+ 
+from bootstrap import run_bootstrap  # noqa: E402
+run_bootstrap()
 
 #APP SETUP
 app = dash.Dash(

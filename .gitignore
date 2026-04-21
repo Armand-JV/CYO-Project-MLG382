@@ -27,6 +27,8 @@ data/processed/*.csv
 *.md
 *.xml
 
+#DONT COMMIT .env (contains secrets)
+.env
 
 #placholders
 
